@@ -1096,6 +1096,44 @@ window.openModal = function(name) {
 <script>
 // ---- DATA ----
 let trips = JSON.parse(localStorage.getItem('dv_trips') || '[]');
+
+// Viaggio pre-caricato: Vacanze per elezioni — Rosolina Mare
+(function() {
+  const TRIP_ID = 'rosolina2026';
+  if (!trips.find(t => t.id === TRIP_ID)) {
+    trips.push({
+      id: TRIP_ID,
+      name: 'Vacanze per elezioni',
+      destination: 'Rosolina Mare',
+      emoji: '🌷',
+      startDate: '2026-03-21',
+      endDate: '2026-03-23',
+      description: 'Tulipani, Agripolis e mare',
+      days: [
+        { id: 'd1', date: '2026-03-21', title: 'Tulipani e aperitivo', text: 'Partenza dopo pranzo per raccogliere i tulipani a Torreglia. Aperitivo ad Arquà Petrarca dove abbiamo dormito.' },
+        { id: 'd2', date: '2026-03-22', title: 'Agripolis', text: 'Visita guidata all\'Agripolis con il Fai dove ci hanno raccontato i progetti. Pomeriggio passeggiata lungomare a Rosolina Mare e dormito nel parcheggio.' },
+        { id: 'd3', date: '2026-03-23', title: 'Rosolina Mare e ritorno', text: 'Sposati vicino a Porto Caleri dove c\'è il biotopo che era chiuso, quindi passeggiata nella natura fino alla spiaggia. Pomeriggio passo alla foce dell\'Adige. Rientro con tappa al McDonald\'s di Monselice.' },
+      ],
+      expenses: [
+        { id: 'e1', name: 'Tulipani',                        cat: '🎟️', amount: '18.00',  date: '2026-03-21' },
+        { id: 'e2', name: 'Aperitivo ad Abano',              cat: '🍽️', amount: '25.50',  date: '2026-03-21' },
+        { id: 'e3', name: 'Parcheggio notte Arquà Petrarca', cat: '🏨', amount: '7.00',   date: '2026-03-21' },
+        { id: 'e4', name: 'Contributo al Fai',               cat: '🎟️', amount: '12.50',  date: '2026-03-22' },
+        { id: 'e5', name: 'McDonald\'s',                     cat: '🍽️', amount: '25.00',  date: '2026-03-23' },
+        { id: 'e6', name: 'Diesel, 33 litri',                cat: '⛽', amount: '62.00',  date: '2026-03-23' },
+      ],
+      places: [
+        { id: 'p1', type: '🏛️', name: 'Arquà Petrarca',  note: 'Aperitivo con le giuggiole' },
+        { id: 'p2', type: '🎭', name: 'Agripolis',        note: 'Visita guidata FAI' },
+        { id: 'p3', type: '🏖️', name: 'Rosolina Mare',    note: 'Porto Caleri e foce dell\'Adige' },
+      ],
+      photos: [],
+      coverUrl: ''
+    });
+    localStorage.setItem('dv_trips', JSON.stringify(trips));
+  }
+})();
+
 let currentTripId = null;
 let currentModal = null;
 let editingDayId = null;
