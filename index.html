@@ -1207,11 +1207,11 @@ async function initDB() {
   }
 
   trips = await dbGetAll();
-  // Ordina dal più recente: usa createdAt se presente, altrimenti id
+  // Ordina per data di inizio: più recente prima
   trips.sort((a, b) => {
-    const ta = a.createdAt || a.id;
-    const tb = b.createdAt || b.id;
-    return tb > ta ? 1 : -1;
+    const da = a.startDate || a.createdAt || a.id;
+    const db2 = b.startDate || b.createdAt || b.id;
+    return db2 > da ? 1 : -1;
   });
 
   // Aggiungi viaggio pre-caricato se non presente
@@ -1308,6 +1308,8 @@ function renderTrips() {
       <div class="trip-card-actions">
         <button class="btn btn-primary" style="flex:1;font-size:0.8rem;padding:7px" onclick="openTrip('${trip.id}')">Apri</button>
         <button class="btn btn-ghost" onclick="shareTrip('${trip.id}')">🔗</button>
+        <button class="btn btn-ghost" onclick="moveTrip('${trip.id}',-1)" title="Sposta su">▲</button>
+        <button class="btn btn-ghost" onclick="moveTrip('${trip.id}',1)" title="Sposta giù">▼</button>
         <button class="btn btn-danger" onclick="deleteTrip(event, '${trip.id}')">🗑</button>
       </div>
     `;
@@ -1369,6 +1371,17 @@ function deleteTrip(e, id) {
     renderTrips();
     showToast('🗑 Viaggio eliminato');
   });
+}
+
+function moveTrip(id, dir) {
+  const idx = trips.findIndex(t => t.id === id);
+  const newIdx = idx + dir;
+  if (newIdx < 0 || newIdx >= trips.length) return;
+  // Scambia
+  [trips[idx], trips[newIdx]] = [trips[newIdx], trips[idx]];
+  // Aggiorna sortOrder su tutti
+  trips.forEach((t, i) => t.sortOrder = i);
+  Promise.all(trips.map(t => dbPut(t))).then(() => renderTrips());
 }
 
 // ---- TRIP DETAIL ----
