@@ -265,7 +265,13 @@
   }
   .trip-hero img {
     position: absolute; inset: 0; width: 100%; height: 100%;
-    object-fit: cover; opacity: 0.4;
+    object-fit: cover; opacity: 0.55;
+  }
+  .trip-hero::after {
+    content: '';
+    position: absolute; inset: 0;
+    background: linear-gradient(to top, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.2) 60%, transparent 100%);
+    z-index: 0;
   }
   .trip-hero-content { position: relative; z-index: 1; }
   .trip-hero h1 {
@@ -273,8 +279,9 @@
     color: #fff;
     font-size: 2.2rem;
     line-height: 1.1;
+    text-shadow: 0 1px 8px rgba(0,0,0,0.8);
   }
-  .trip-hero p { color: rgba(255,255,255,0.7); font-size: 0.9rem; margin-top: 4px; }
+  .trip-hero p { color: rgba(255,255,255,0.9); font-size: 0.9rem; margin-top: 4px; text-shadow: 0 1px 6px rgba(0,0,0,0.8); }
 
   .back-btn {
     display: inline-flex; align-items: center; gap: 6px;
@@ -1094,59 +1101,122 @@ window.openModal = function(name) {
 </script>
 
 <script>
-// ---- DATA ----
-let trips = JSON.parse(localStorage.getItem('dv_trips') || '[]');
-
-// Viaggio pre-caricato: Vacanze per elezioni — Rosolina Mare
-(function() {
-  const TRIP_ID = 'rosolina2026';
-  if (!trips.find(t => t.id === TRIP_ID)) {
-    trips.push({
-      id: TRIP_ID,
-      name: 'Vacanze per elezioni',
-      destination: 'Rosolina Mare',
-      emoji: '🌷',
-      startDate: '2026-03-21',
-      endDate: '2026-03-23',
-      description: 'Tulipani, Agripolis e mare',
-      days: [
-        { id: 'd1', date: '2026-03-21', title: 'Tulipani e aperitivo', text: 'Partenza dopo pranzo per raccogliere i tulipani a Torreglia. Aperitivo ad Arquà Petrarca dove abbiamo dormito.' },
-        { id: 'd2', date: '2026-03-22', title: 'Agripolis', text: 'Visita guidata all\'Agripolis con il Fai dove ci hanno raccontato i progetti. Pomeriggio passeggiata lungomare a Rosolina Mare e dormito nel parcheggio.' },
-        { id: 'd3', date: '2026-03-23', title: 'Rosolina Mare e ritorno', text: 'Sposati vicino a Porto Caleri dove c\'è il biotopo che era chiuso, quindi passeggiata nella natura fino alla spiaggia. Pomeriggio passo alla foce dell\'Adige. Rientro con tappa al McDonald\'s di Monselice.' },
-      ],
-      expenses: [
-        { id: 'e1', name: 'Tulipani',                        cat: '🎟️', amount: '18.00',  date: '2026-03-21' },
-        { id: 'e2', name: 'Aperitivo ad Abano',              cat: '🍽️', amount: '25.50',  date: '2026-03-21' },
-        { id: 'e3', name: 'Parcheggio notte Arquà Petrarca', cat: '🏨', amount: '7.00',   date: '2026-03-21' },
-        { id: 'e4', name: 'Contributo al Fai',               cat: '🎟️', amount: '12.50',  date: '2026-03-22' },
-        { id: 'e5', name: 'McDonald\'s',                     cat: '🍽️', amount: '25.00',  date: '2026-03-23' },
-        { id: 'e6', name: 'Diesel, 33 litri',                cat: '⛽', amount: '62.00',  date: '2026-03-23' },
-      ],
-      places: [
-        { id: 'p1', type: '🏛️', name: 'Arquà Petrarca',  note: 'Aperitivo con le giuggiole' },
-        { id: 'p2', type: '🎭', name: 'Agripolis',        note: 'Visita guidata FAI' },
-        { id: 'p3', type: '🏖️', name: 'Rosolina Mare',    note: 'Porto Caleri e foce dell\'Adige' },
-      ],
-      photos: [],
-      coverUrl: ''
-    });
-    localStorage.setItem('dv_trips', JSON.stringify(trips));
-  }
-})();
-
+// ---- DATA — IndexedDB ----
+let trips = [];
 let currentTripId = null;
 let currentModal = null;
 let editingDayId = null;
+let _db = null;
 
-function save() {
-  try {
-    localStorage.setItem('dv_trips', JSON.stringify(trips));
-    return true;
-  } catch(e) {
-    // localStorage quota exceeded - try to save without photo data
-    showToast('⚠️ Spazio esaurito! Riduci le foto.');
-    return false;
+const PRELOADED = {
+  id: 'rosolina2026',
+  name: 'Vacanze per elezioni',
+  destination: 'Rosolina Mare',
+  emoji: '🌷',
+  startDate: '2026-03-21',
+  endDate: '2026-03-23',
+  description: 'Tulipani, Agripolis e mare',
+  days: [
+    { id: 'd1', date: '2026-03-21', title: 'Tulipani e aperitivo', text: 'Partenza dopo pranzo per raccogliere i tulipani a Torreglia. Aperitivo ad Arquà Petrarca dove abbiamo dormito.' },
+    { id: 'd2', date: '2026-03-22', title: 'Agripolis', text: 'Visita guidata all\'Agripolis con il Fai dove ci hanno raccontato i progetti. Pomeriggio passeggiata lungomare a Rosolina Mare e dormito nel parcheggio.' },
+    { id: 'd3', date: '2026-03-23', title: 'Rosolina Mare e ritorno', text: 'Sposati vicino a Porto Caleri dove c\'è il biotopo che era chiuso, quindi passeggiata nella natura fino alla spiaggia. Pomeriggio passo alla foce dell\'Adige. Rientro con tappa al McDonald\'s di Monselice.' },
+  ],
+  expenses: [
+    { id: 'e1', name: 'Tulipani',                        cat: '🎟️', amount: '18.00',  date: '2026-03-21' },
+    { id: 'e2', name: 'Aperitivo ad Abano',              cat: '🍽️', amount: '25.50',  date: '2026-03-21' },
+    { id: 'e3', name: 'Parcheggio notte Arquà Petrarca', cat: '🏨', amount: '7.00',   date: '2026-03-21' },
+    { id: 'e4', name: 'Contributo al Fai',               cat: '🎟️', amount: '12.50',  date: '2026-03-22' },
+    { id: 'e5', name: 'McDonald\'s',                     cat: '🍽️', amount: '25.00',  date: '2026-03-23' },
+    { id: 'e6', name: 'Diesel, 33 litri',                cat: '⛽', amount: '62.00',  date: '2026-03-23' },
+  ],
+  places: [
+    { id: 'p1', type: '🏛️', name: 'Arquà Petrarca',  note: 'Aperitivo con le giuggiole' },
+    { id: 'p2', type: '🎭', name: 'Agripolis',        note: 'Visita guidata FAI' },
+    { id: 'p3', type: '🏖️', name: 'Rosolina Mare',    note: 'Porto Caleri e foce dell\'Adige' },
+  ],
+  photos: [],
+  coverUrl: ''
+};
+
+function openDB() {
+  return new Promise((resolve, reject) => {
+    if (_db) { resolve(_db); return; }
+    const req = indexedDB.open('diario_viaggi', 1);
+    req.onupgradeneeded = e => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains('trips')) {
+        db.createObjectStore('trips', { keyPath: 'id' });
+      }
+    };
+    req.onsuccess = e => { _db = e.target.result; resolve(_db); };
+    req.onerror   = e => reject(e.target.error);
+  });
+}
+
+function dbGetAll() {
+  return openDB().then(db => new Promise((resolve, reject) => {
+    const tx = db.transaction('trips', 'readonly');
+    const req = tx.objectStore('trips').getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror   = e => reject(e.target.error);
+  }));
+}
+
+function dbPut(trip) {
+  return openDB().then(db => new Promise((resolve, reject) => {
+    const tx = db.transaction('trips', 'readwrite');
+    const req = tx.objectStore('trips').put(trip);
+    req.onsuccess = () => resolve();
+    req.onerror   = e => reject(e.target.error);
+  }));
+}
+
+function dbDelete(id) {
+  return openDB().then(db => new Promise((resolve, reject) => {
+    const tx = db.transaction('trips', 'readwrite');
+    const req = tx.objectStore('trips').delete(id);
+    req.onsuccess = () => resolve();
+    req.onerror   = e => reject(e.target.error);
+  }));
+}
+
+// Salva il viaggio corrente (o tutti) in IndexedDB
+// Ritorna una Promise
+function save(tripToSave) {
+  const targets = tripToSave ? [tripToSave] : trips;
+  return Promise.all(targets.map(t => dbPut(t)))
+    .then(() => true)
+    .catch(err => {
+      console.error('Errore salvataggio:', err);
+      showToast('⚠️ Errore nel salvataggio!');
+      return false;
+    });
+}
+
+// Avvio app: carica da IndexedDB (e migra da localStorage se presente)
+async function initDB() {
+  // Migrazione da localStorage
+  const old = localStorage.getItem('dv_trips');
+  if (old) {
+    try {
+      const oldTrips = JSON.parse(old);
+      for (const t of oldTrips) await dbPut(t);
+      localStorage.removeItem('dv_trips');
+      showToast('✅ Dati migrati — ora hai spazio illimitato!');
+    } catch(e) { console.warn('Migrazione fallita', e); }
   }
+
+  trips = await dbGetAll();
+  // Ordina per data creazione (id contiene timestamp)
+  trips.sort((a, b) => b.id < a.id ? -1 : 1);
+
+  // Aggiungi viaggio pre-caricato se non presente
+  if (!trips.find(t => t.id === PRELOADED.id)) {
+    trips.push(PRELOADED);
+    await dbPut(PRELOADED);
+  }
+
+  renderTrips();
 }
 
 function uid() {
@@ -1273,26 +1343,27 @@ function saveTrip() {
     days: [], photos: [], expenses: [], places: []
   };
   trips.unshift(trip);
-  save();
-  closeModal();
-  renderTrips();
-  showToast('✅ Viaggio creato!');
-  // clear
-  pendingCoverBase64 = '';
-  ['tripName','tripDest','tripStart','tripEnd','tripEmoji','tripCover','tripDesc'].forEach(id => document.getElementById(id).value = '');
-  document.getElementById('tripCoverPreview').style.display = 'none';
-  document.getElementById('tripCoverFile').value = '';
-  // auto-open
-  openTrip(trip.id);
+  save(trip).then(ok => {
+    if (!ok) { trips.shift(); return; }
+    closeModal();
+    renderTrips();
+    showToast('✅ Viaggio creato!');
+    pendingCoverBase64 = '';
+    ['tripName','tripDest','tripStart','tripEnd','tripEmoji','tripCover','tripDesc'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('tripCoverPreview').style.display = 'none';
+    document.getElementById('tripCoverFile').value = '';
+    openTrip(trip.id);
+  });
 }
 
 function deleteTrip(e, id) {
   e.stopPropagation();
   if (!confirm('Eliminare questo viaggio?')) return;
   trips = trips.filter(t => t.id !== id);
-  save();
-  renderTrips();
-  showToast('🗑 Viaggio eliminato');
+  dbDelete(id).then(() => {
+    renderTrips();
+    showToast('🗑 Viaggio eliminato');
+  });
 }
 
 // ---- TRIP DETAIL ----
@@ -1300,13 +1371,20 @@ function changeCoverPhoto(file) {
   if (!file) return;
   const reader = new FileReader();
   reader.onload = (e) => {
-    const trip = getTrip();
-    trip.coverUrl = e.target.result;
-    save();
-    // Update hero immediately
-    const hero = document.getElementById('tripHero');
-    hero.style.backgroundImage = `url(${e.target.result})`;
-    showToast('✅ Foto di copertina aggiornata!');
+    // Comprimi la copertina: max 900px larghezza, qualità 0.6
+    compressImage(e.target.result, 900, 0.6).then(compressed => {
+      const trip = getTrip();
+      trip.coverUrl = compressed;
+      save(getTrip());
+      // Update hero immediately
+      const hero = document.getElementById('tripHero');
+      hero.querySelectorAll('img').forEach(i => i.remove());
+      const img = document.createElement('img');
+      img.src = compressed;
+      hero.insertBefore(img, hero.firstChild);
+      const kb = Math.round(compressed.length * 0.75 / 1024);
+      showToast(`✅ Foto copertina aggiornata (${kb} KB)`);
+    });
   };
   reader.readAsDataURL(file);
 }
@@ -1404,7 +1482,7 @@ function saveDay() {
       text: document.getElementById('dayText').value.trim()
     });
   }
-  save(); closeModalDirect(); renderDays();
+  save(getTrip()); closeModalDirect(); renderDays();
   showToast('✅ Giorno salvato');
   ['dayDate','dayTitle','dayText'].forEach(id => document.getElementById(id).value = '');
 }
@@ -1423,7 +1501,7 @@ function editDay(id) {
 function deleteDay(id) {
   const trip = getTrip();
   trip.days = trip.days.filter(d => d.id !== id);
-  save(); renderDays(); showToast('🗑 Giorno eliminato');
+  save(getTrip()); renderDays(); showToast('🗑 Giorno eliminato');
 }
 
 // ---- ITINERARIO ----
@@ -1488,7 +1566,7 @@ function saveKm() {
   if (!trip.itinerario) trip.itinerario = { kmStart: '', kmEnd: '', tappe: [] };
   trip.itinerario.kmStart = document.getElementById('kmStart').value;
   trip.itinerario.kmEnd = document.getElementById('kmEnd').value;
-  save();
+  save(getTrip());
   showToast('✅ Km salvati!');
 }
 
@@ -1505,7 +1583,7 @@ function saveTappa() {
     date: document.getElementById('tappaDate').value,
     nota: document.getElementById('tappaNota').value.trim()
   });
-  save(); closeModalDirect(); renderItinerario();
+  save(getTrip()); closeModalDirect(); renderItinerario();
   showToast('✅ Tappa aggiunta');
   ['tappaFrom','tappaTo','tappaKm','tappaDate','tappaNota'].forEach(id => document.getElementById(id).value = '');
 }
@@ -1513,7 +1591,7 @@ function saveTappa() {
 function deleteTappa(id) {
   const trip = getTrip();
   trip.itinerario.tappe = trip.itinerario.tappe.filter(t => t.id !== id);
-  save(); renderItinerario(); showToast('🗑 Tappa eliminata');
+  save(getTrip()); renderItinerario(); showToast('🗑 Tappa eliminata');
 }
 
 // ---- PHOTOS ----
@@ -1579,6 +1657,24 @@ function compressImage(dataUrl, maxWidth, quality) {
   });
 }
 
+// Compressione aggressiva a più livelli finché entra nello spazio
+async function compressToFit(dataUrl) {
+  const levels = [
+    { maxWidth: 800, quality: 0.6 },
+    { maxWidth: 600, quality: 0.5 },
+    { maxWidth: 480, quality: 0.4 },
+    { maxWidth: 360, quality: 0.3 },
+    { maxWidth: 300, quality: 0.25 },
+  ];
+  let result = dataUrl;
+  for (const { maxWidth, quality } of levels) {
+    result = await compressImage(dataUrl, maxWidth, quality);
+    const kb = Math.round(result.length * 0.75 / 1024);
+    if (kb < 120) break; // sotto 120KB va bene
+  }
+  return result;
+}
+
 function savePhoto() {
   const count = pendingPhotoFiles.length;
   if (count === 0) {
@@ -1589,36 +1685,35 @@ function savePhoto() {
   if (!trip) { showToast('Errore: viaggio non trovato'); return; }
   const caption = document.getElementById('photoCaption').value.trim();
   const date = document.getElementById('photoDate').value;
+  const btn = document.getElementById('photoSaveBtn');
+  if (btn) { btn.textContent = '⏳ Comprimo...'; btn.style.background = '#888'; }
 
-  // Compress all images then save
-  Promise.all(pendingPhotoFiles.map(dataUrl => compressImage(dataUrl, 600, 0.5)))
+  Promise.all(pendingPhotoFiles.map(dataUrl => compressToFit(dataUrl)))
     .then(compressed => {
+      // Mostra dimensione finale
+      const totalKb = compressed.reduce((s, d) => s + Math.round(d.length * 0.75 / 1024), 0);
       compressed.forEach(dataUrl => {
         trip.photos.push({ id: uid(), url: dataUrl, caption, date });
       });
-      const ok = save();
-      if (!ok) {
-        trip.photos.splice(-count);
-        return;
-      }
-      closeModalDirect();
-      renderPhotos();
-      showToast(`✅ ${count} foto aggiunt${count===1?'a':'e'}!`);
-      pendingPhotoFiles = [];
-      document.getElementById('photoCaption').value = '';
-      document.getElementById('photoDate').value = '';
-      document.getElementById('photoFileInput').value = '';
-      document.getElementById('photoPreviewGrid').style.display = 'none';
-      document.getElementById('photoPreviewItems').innerHTML = '';
-      const btn = document.getElementById('photoSaveBtn');
-      if (btn) { btn.textContent = 'Salva'; btn.style.background = ''; }
+      save(trip).then(() => {
+        closeModalDirect();
+        renderPhotos();
+        showToast(`✅ ${count} foto salvat${count===1?'a':'e'} (${totalKb} KB)`);
+        pendingPhotoFiles = [];
+        document.getElementById('photoCaption').value = '';
+        document.getElementById('photoDate').value = '';
+        document.getElementById('photoFileInput').value = '';
+        document.getElementById('photoPreviewGrid').style.display = 'none';
+        document.getElementById('photoPreviewItems').innerHTML = '';
+        if (btn) { btn.textContent = 'Salva'; btn.style.background = ''; }
+      });
     });
 }
 
 function deletePhoto(id) {
   const trip = getTrip();
   trip.photos = trip.photos.filter(p => p.id !== id);
-  save(); renderPhotos(); showToast('🗑 Foto eliminata');
+  save(getTrip()); renderPhotos(); showToast('🗑 Foto eliminata');
 }
 
 // ---- EXPENSES ----
@@ -1661,7 +1756,7 @@ function saveExpense() {
     cat: document.getElementById('expCat').value,
     date: document.getElementById('expDate').value
   });
-  save(); closeModalDirect(); renderExpenses();
+  save(getTrip()); closeModalDirect(); renderExpenses();
   showToast('✅ Spesa aggiunta');
   ['expName','expAmount','expDate'].forEach(id => document.getElementById(id).value = '');
 }
@@ -1669,7 +1764,7 @@ function saveExpense() {
 function deleteExpense(id) {
   const trip = getTrip();
   trip.expenses = trip.expenses.filter(e => e.id !== id);
-  save(); renderExpenses(); showToast('🗑 Spesa eliminata');
+  save(getTrip()); renderExpenses(); showToast('🗑 Spesa eliminata');
 }
 
 // ---- PLACES ----
@@ -1702,7 +1797,7 @@ function savePlace() {
     type: document.getElementById('placeType').value,
     note: document.getElementById('placeNote').value.trim()
   });
-  save(); closeModalDirect(); renderPlaces();
+  save(getTrip()); closeModalDirect(); renderPlaces();
   showToast('✅ Luogo aggiunto');
   ['placeName','placeNote'].forEach(id => document.getElementById(id).value = '');
 }
@@ -1710,7 +1805,7 @@ function savePlace() {
 function deletePlace(id) {
   const trip = getTrip();
   trip.places = trip.places.filter(p => p.id !== id);
-  save(); renderPlaces(); showToast('🗑 Luogo eliminato');
+  save(getTrip()); renderPlaces(); showToast('🗑 Luogo eliminato');
 }
 
 function openInNotion() {
@@ -1906,15 +2001,16 @@ function importTrips(input) {
       const data = JSON.parse(e.target.result);
       const imported = Array.isArray(data) ? data : [data];
       let count = 0;
-      imported.forEach(trip => {
-        if (!trips.find(t => t.id === trip.id)) {
-          trips.unshift(trip);
-          count++;
+      const toAdd = [];
+      imported.forEach(t => {
+        if (!trips.find(x => x.id === t.id)) {
+          trips.unshift(t); toAdd.push(t); count++;
         }
       });
-      save();
-      renderTrips();
-      showToast(`✅ ${count} viaggio/i importato/i!`);
+      Promise.all(toAdd.map(t => dbPut(t))).then(() => {
+        renderTrips();
+        showToast(`✅ ${count} viaggio/i importato/i!`);
+      });
     } catch(err) {
       showToast('❌ File non valido');
     }
@@ -2268,7 +2364,7 @@ function handleSharedTrip(trip) {
 
 function importSharedTrip(trip) {
   trips.unshift(trip);
-  save();
+  save(getTrip());
   showToast('✅ Viaggio importato nel tuo diario!');
   document.getElementById('sharedBanner')?.remove();
   renderTrips();
@@ -2276,7 +2372,7 @@ function importSharedTrip(trip) {
 }
 
 // ---- INIT ----
-renderTrips();
+initDB();
 checkShare();
 </script>
 <!-- PWA INSTALL BANNER -->
