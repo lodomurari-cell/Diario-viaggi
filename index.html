@@ -1207,8 +1207,12 @@ async function initDB() {
   }
 
   trips = await dbGetAll();
-  // Ordina per data creazione (id contiene timestamp)
-  trips.sort((a, b) => b.id < a.id ? -1 : 1);
+  // Ordina dal più recente: usa createdAt se presente, altrimenti id
+  trips.sort((a, b) => {
+    const ta = a.createdAt || a.id;
+    const tb = b.createdAt || b.id;
+    return tb > ta ? 1 : -1;
+  });
 
   // Aggiungi viaggio pre-caricato se non presente
   if (!trips.find(t => t.id === PRELOADED.id)) {
@@ -1333,6 +1337,7 @@ function saveTrip() {
   const coverUrl = pendingCoverBase64 || document.getElementById('tripCover').value.trim();
   const trip = {
     id: uid(),
+    createdAt: new Date().toISOString(),
     name,
     destination: document.getElementById('tripDest').value.trim(),
     startDate: document.getElementById('tripStart').value,
